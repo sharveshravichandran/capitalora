@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <base href="/">
+  <meta charset="UTF-8">
+  <meta content="IE=Edge" http-equiv="X-UA-Compatible">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="My Wealth - salary, credits and daily expenses.">
+
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black">
+  <meta name="apple-mobile-web-app-title" content="My Wealth">
+  <link rel="apple-touch-icon" href="icons/Icon-192.png">
+
+  <link rel="icon" type="image/png" href="favicon.png"/>
+  <title>My Wealth</title>
+  <link rel="manifest" href="manifest.json">
+
+  <style>
+    html, body { margin: 0; height: 100%; }
+    #splash {
+      position: fixed; inset: 0; z-index: 9999;
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      background: linear-gradient(135deg, #00897b 0%, #5e35b1 50%, #d81b60 100%);
+      color: #fff; font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+      transition: opacity .5s ease;
+    }
+    #splash.hide { opacity: 0; pointer-events: none; }
+    #splash .brand { font-size: 34px; font-weight: 700; letter-spacing: .5px; margin-bottom: 28px; }
+    #splash .bar {
+      width: min(280px, 70vw); height: 8px; border-radius: 8px; overflow: hidden;
+      background: rgba(255,255,255,.28);
+    }
+    #bar-fill {
+      height: 100%; width: 0; border-radius: 8px;
+      background: linear-gradient(90deg, #ffee58, #ffffff);
+      transition: width .3s ease;
+    }
+    #pct { margin-top: 12px; font-size: 14px; opacity: .9; }
+  </style>
+</head>
+<body>
+  <div id="splash">
+    <div class="brand">My Wealth</div>
+    <div class="bar"><div id="bar-fill"></div></div>
+    <div id="pct">Loading… 0%</div>
+  </div>
+
+  <script>
+    // Browsers don't report download progress for the Flutter bundle, so the
+    // bar is an estimate that creeps towards 92% and jumps to 100% when
+    // Flutter draws its first frame.
+    (function () {
+      var fill = document.getElementById('bar-fill');
+      var label = document.getElementById('pct');
+      var splash = document.getElementById('splash');
+      var p = 3;
+      function set(v) {
+        p = v;
+        fill.style.width = v + '%';
+        label.textContent = 'Loading… ' + Math.round(v) + '%';
+      }
+      set(p);
+      var timer = setInterval(function () { set(p + (92 - p) * 0.035); }, 150);
+      var finished = false;
+      function done() {
+        if (finished) return;
+        finished = true;
+        clearInterval(timer);
+        set(100);
+        setTimeout(function () {
+          splash.classList.add('hide');
+          setTimeout(function () { splash.remove(); }, 600);
+        }, 250);
+      }
+      window.addEventListener('flutter-first-frame', done);
+      setTimeout(done, 60000); // safety net
+    })();
+  </script>
+
+  <script src="flutter_bootstrap.js" async></script>
+</body>
+</html>

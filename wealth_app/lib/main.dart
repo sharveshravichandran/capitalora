@@ -26,7 +26,7 @@ class WealthApp extends StatelessWidget {
       );
 }
 
-/// Shows login when signed out, otherwise routes by role.
+/// Shows login when signed out, otherwise the home screen.
 class AuthGate extends StatelessWidget {
   const AuthGate({super.key});
   @override
@@ -70,7 +70,7 @@ class _RoleRouterState extends State<RoleRouter> {
               body: Center(child: CircularProgressIndicator()));
         }
         final role = doc.data?.data()?['role'];
-        return role == 'admin' ? const AdminPage() : HomePage(user: widget.user);
+        return HomePage(user: widget.user, isAdmin: role == 'admin');
       },
     );
   }
@@ -111,7 +111,7 @@ class _LoginPageState extends State<LoginPage> {
     }
   }
 
-  /// Saves email + last login + login count. Role is only set on first create.
+  /// Saves email + last login + login count + history. Role only set on create.
   Future<void> _recordLogin(User u) async {
     final ref = FirebaseFirestore.instance.collection('users').doc(u.uid);
     final snap = await ref.get();
@@ -130,6 +130,7 @@ class _LoginPageState extends State<LoginPage> {
         'loginCount': 1,
       });
     }
+    await ref.collection('logins').add({'at': FieldValue.serverTimestamp()});
   }
 
   @override
@@ -194,22 +195,45 @@ class _LoginPageState extends State<LoginPage> {
   }
 }
 
-/// Regular user screen. Put your assets / salary / savings screens here.
+/// Default screen for everyone. Admins get an extra "Login details" menu item.
 class HomePage extends StatelessWidget {
   final User user;
-  const HomePage({super.key, required this.user});
+  final bool isAdmin;
+  const HomePage({super.key, required this.user, this.isAdmin = false});
+
   @override
   Widget build(BuildContext context) => Scaffold(
         appBar: AppBar(title: const Text('My Wealth'), actions: [
-          IconButton(
-              onPressed: FirebaseAuth.instance.signOut,
-              icon: const Icon(Icons.logout))
+          PopupMenuButton<String>(
+            onSelected: (v) {
+              if (v == 'logins') {
+                Navigator.push(context,
+                    MaterialPageRoute(builder: (_) => const AdminPage()));
+              } else if (v == 'logout') {
+                FirebaseAuth.instance.signOut();
+              }
+            },
+            itemBuilder: (_) => [
+              if (isAdmin)
+                const PopupMenuItem(
+                  value: 'logins',
+                  child: ListTile(
+                      leading: Icon(Icons.people),
+                      title: Text('Login details')),
+                ),
+              const PopupMenuItem(
+                value: 'logout',
+                child: ListTile(
+                    leading: Icon(Icons.logout), title: Text('Sign out')),
+              ),
+            ],
+          ),
         ]),
         body: Center(child: Text('Welcome, ${user.email}')),
       );
 }
 
-/// Admin screen: only lists who has logged in (email, last login, count).
+/// Admin screen: lists users (email, last login, count); tap for history.
 class AdminPage extends StatelessWidget {
   const AdminPage({super.key});
 
@@ -226,14 +250,41 @@ class AdminPage extends StatelessWidget {
     return '${d.year}-${p(d.month)}-${p(d.day)} ${p(d.hour)}:${p(d.minute)}';
   }
 
+  void _showHistory(BuildContext context, String uid, String email) {
+    showModalBottomSheet(
+      context: context,
+      builder: (_) => StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+        stream: FirebaseFirestore.instance
+            .collection('users')
+            .doc(uid)
+            .collection('logins')
+            .orderBy('at', descending: true)
+            .limit(30)
+            .snapshots(),
+        builder: (context, snap) {
+          if (!snap.hasData) {
+            return const Center(child: CircularProgressIndicator());
+          }
+          final items = snap.data!.docs;
+          return ListView(children: [
+            ListTile(
+                title: Text(email,
+                    style: Theme.of(context).textTheme.titleMedium)),
+            for (final d in items)
+              ListTile(
+                  dense: true,
+                  leading: const Icon(Icons.login, size: 18),
+                  title: Text(_fmt(d.data()['at'] as Timestamp?))),
+          ]);
+        },
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Admin: logged-in users'), actions: [
-        IconButton(
-            onPressed: FirebaseAuth.instance.signOut,
-            icon: const Icon(Icons.logout))
-      ]),
+      appBar: AppBar(title: const Text('Admin: login details')),
       body: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
         stream: _usersStream,
         builder: (context, snap) {
@@ -266,6 +317,8 @@ class AdminPage extends StatelessWidget {
                     trailing: u['role'] == 'admin'
                         ? const Chip(label: Text('admin'))
                         : null,
+                    onTap: () =>
+                        _showHistory(context, docs[i].id, u['email'] ?? ''),
                   );
                 },
               ),
